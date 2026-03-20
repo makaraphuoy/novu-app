@@ -79,7 +79,7 @@ function confirmDelete(habit: any) {
     },
   )
 }
-
+//AA
 const completedCount = computed(() => (habits.value ?? []).filter((h: any) => h.completedToday).length)
 const total = computed(() => (habits.value ?? []).length)
 const progress = computed(() => total.value ? Math.round((completedCount.value / total.value) * 100) : 0)
