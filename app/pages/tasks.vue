@@ -10,25 +10,19 @@ const editingTask = ref<any>(null)
 const form = reactive({ title: '', description: '', priority: 'medium', dueDate: '' })
 const loading = ref(false)
 
-const statusFilter = ref('all')
-const statusOptions = [
-  { label: 'All', value: 'all' },
-  { label: 'To Do', value: 'todo' },
-  { label: 'In Progress', value: 'in_progress' },
-  { label: 'Done', value: 'done' },
+const draggingTask = ref<any>(null)
+const dragOverColumn = ref<string | null>(null)
+
+const columns = [
+  { key: 'todo', label: 'To Do', icon: 'i-lucide-circle', color: 'text-neutral-400' },
+  { key: 'in_progress', label: 'In Progress', icon: 'i-lucide-circle-dot', color: 'text-warning' },
+  { key: 'done', label: 'Done', icon: 'i-lucide-circle-check-big', color: 'text-success' },
 ]
 
-const filteredTasks = computed(() => {
-  const all = tasks.value ?? []
-  if (statusFilter.value === 'all') return all
-  return all.filter(t => t.status === statusFilter.value)
-})
-
-const counts = computed(() => ({
-  all: tasks.value?.length ?? 0,
-  todo: tasks.value?.filter(t => t.status === 'todo').length ?? 0,
-  in_progress: tasks.value?.filter(t => t.status === 'in_progress').length ?? 0,
-  done: tasks.value?.filter(t => t.status === 'done').length ?? 0,
+const tasksByStatus = computed(() => ({
+  todo: (tasks.value ?? []).filter(t => t.status === 'todo'),
+  in_progress: (tasks.value ?? []).filter(t => t.status === 'in_progress'),
+  done: (tasks.value ?? []).filter(t => t.status === 'done'),
 }))
 
 function openCreate() {
@@ -82,14 +76,37 @@ async function save() {
   }
 }
 
-async function updateStatus(task: any, status: string) {
-  await $fetch(`/api/tasks/${task.id}`, { method: 'PATCH', body: { status } })
-  await refresh()
+function onDragStart(task: any) {
+  draggingTask.value = task
+}
+
+function onDragEnd() {
+  draggingTask.value = null
+  dragOverColumn.value = null
+}
+
+async function onDrop(status: string) {
+  const task = draggingTask.value
+  draggingTask.value = null
+  dragOverColumn.value = null
+
+  if (!task || task.status === status) return
+
+  // Optimistic update
+  const local = tasks.value?.find(t => t.id === task.id)
+  if (local) local.status = status
+
+  try {
+    await $fetch(`/api/tasks/${task.id}`, { method: 'PATCH', body: { status } })
+    await refresh()
+  }
+  catch {
+    toast.add({ title: 'Failed to move task', color: 'error' })
+    await refresh()
+  }
 }
 
 const priorityColor = (p: string) => p === 'high' ? 'error' : p === 'medium' ? 'warning' : 'neutral'
-const statusColor = (s: string) => s === 'done' ? 'success' : s === 'in_progress' ? 'warning' : 'neutral'
-
 const priorityBorder = (p: string) => p === 'high'
   ? 'border-l-4 border-l-error'
   : p === 'medium'
@@ -98,82 +115,89 @@ const priorityBorder = (p: string) => p === 'high'
 </script>
 
 <template>
-  <div class="p-4 lg:p-8 max-w-4xl mx-auto space-y-6">
+  <div class="h-screen flex flex-col overflow-hidden">
     <!-- Header -->
-    <div class="flex items-center justify-between">
+    <div class="px-4 lg:px-8 py-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
       <div>
         <h1 class="text-2xl font-bold">Tasks</h1>
-        <p class="text-sm text-muted-foreground mt-0.5">{{ counts.done }} of {{ counts.all }} completed</p>
+        <p class="text-sm text-muted-foreground mt-0.5">
+          {{ tasksByStatus.done.length }} of {{ tasks?.length ?? 0 }} completed
+        </p>
       </div>
       <UButton icon="i-lucide-plus" @click="openCreate">New Task</UButton>
     </div>
 
-    <!-- Filter tabs -->
-    <div class="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit">
-      <button
-        v-for="opt in statusOptions"
-        :key="opt.value"
-        class="px-3 py-1.5 rounded-md text-sm font-medium transition-all"
-        :class="statusFilter === opt.value
-          ? 'bg-background shadow-sm text-foreground'
-          : 'text-muted-foreground hover:text-foreground'"
-        @click="statusFilter = opt.value"
-      >
-        {{ opt.label }}
-        <span class="ml-1.5 text-xs opacity-60">{{ counts[opt.value as keyof typeof counts] }}</span>
-      </button>
-    </div>
-
-    <!-- Task list -->
-    <div class="space-y-2">
-      <div
-        v-for="task in filteredTasks"
-        :key="task.id"
-        class="bg-card rounded-xl p-4 flex items-start gap-4 hover:shadow-md transition-all"
-        :class="priorityBorder(task.priority)"
-      >
-        <UCheckbox
-          :model-value="task.status === 'done'"
-          class="mt-0.5"
-          @update:model-value="updateStatus(task, $event ? 'done' : 'todo')"
-        />
-
-        <div class="flex-1 min-w-0">
-          <p
-            class="font-medium leading-snug"
-            :class="task.status === 'done' ? 'line-through text-muted-foreground' : ''"
-          >
-            {{ task.title }}
-          </p>
-          <p v-if="task.description" class="text-sm text-muted-foreground mt-0.5 line-clamp-2">
-            {{ task.description }}
-          </p>
-          <div class="flex flex-wrap items-center gap-2 mt-2">
-            <UBadge :color="priorityColor(task.priority)" variant="soft" size="sm">
-              {{ task.priority }}
-            </UBadge>
-            <UBadge :color="statusColor(task.status)" variant="soft" size="sm">
-              {{ task.status.replace('_', ' ') }}
-            </UBadge>
-            <span v-if="task.dueDate" class="text-xs text-muted-foreground flex items-center gap-1">
-              <UIcon name="i-lucide-calendar" class="text-xs" />
-              {{ task.dueDate }}
+    <!-- Kanban board -->
+    <div class="flex-1 overflow-x-auto overflow-y-hidden p-4 lg:p-6">
+      <div class="flex gap-4 h-full min-w-[680px]">
+        <div
+          v-for="col in columns"
+          :key="col.key"
+          class="flex-1 flex flex-col rounded-xl transition-all duration-150"
+          :class="dragOverColumn === col.key
+            ? 'bg-primary/5 ring-2 ring-primary/25'
+            : 'bg-muted/50'"
+          @dragover.prevent="dragOverColumn = col.key"
+          @dragleave="dragOverColumn = null"
+          @drop.prevent="onDrop(col.key)"
+        >
+          <!-- Column header -->
+          <div class="px-3 pt-3 pb-2 flex items-center gap-2 flex-shrink-0">
+            <UIcon :name="col.icon" class="text-base" :class="col.color" />
+            <span class="font-semibold text-sm">{{ col.label }}</span>
+            <span class="ml-auto text-xs font-medium bg-background rounded-full px-2 py-0.5 border border-gray-200">
+              {{ tasksByStatus[col.key as keyof typeof tasksByStatus].length }}
             </span>
           </div>
-        </div>
 
-        <div class="flex gap-1 flex-shrink-0">
-          <UButton icon="i-lucide-pencil" variant="ghost" size="sm" color="neutral" @click="openEdit(task)" />
-          <UButton icon="i-lucide-trash-2" variant="ghost" size="sm" color="error" @click="confirmDelete(task)" />
-        </div>
-      </div>
+          <!-- Task cards -->
+          <div class="flex-1 overflow-y-auto px-2 pb-2 space-y-2">
+            <div
+              v-for="task in tasksByStatus[col.key as keyof typeof tasksByStatus]"
+              :key="task.id"
+              draggable="true"
+              class="bg-card rounded-lg p-3 shadow-sm select-none cursor-grab active:cursor-grabbing transition-all"
+              :class="[
+                priorityBorder(task.priority),
+                draggingTask?.id === task.id ? 'opacity-40 scale-[0.97]' : 'hover:shadow-md',
+              ]"
+              @dragstart="onDragStart(task)"
+              @dragend="onDragEnd"
+            >
+              <p
+                class="text-sm font-medium leading-snug"
+                :class="task.status === 'done' ? 'line-through text-muted-foreground' : ''"
+              >
+                {{ task.title }}
+              </p>
+              <p v-if="task.description" class="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                {{ task.description }}
+              </p>
+              <div class="flex items-center gap-1.5 mt-2">
+                <UBadge :color="priorityColor(task.priority)" variant="soft" size="xs">
+                  {{ task.priority }}
+                </UBadge>
+                <span v-if="task.dueDate" class="text-xs text-muted-foreground flex items-center gap-1">
+                  <UIcon name="i-lucide-calendar" class="text-xs" />
+                  {{ task.dueDate }}
+                </span>
+                <div class="ml-auto flex gap-0.5">
+                  <UButton icon="i-lucide-pencil" variant="ghost" size="xs" color="neutral" @click.stop="openEdit(task)" />
+                  <UButton icon="i-lucide-trash-2" variant="ghost" size="xs" color="error" @click.stop="confirmDelete(task)" />
+                </div>
+              </div>
+            </div>
 
-      <div v-if="!filteredTasks.length" class="py-20 text-center text-muted-foreground">
-        <UIcon name="i-lucide-inbox" class="text-5xl mb-3 opacity-40" />
-        <p class="font-medium">No tasks here</p>
-        <p class="text-sm mt-1 opacity-70">
-          {{ statusFilter === 'all' ? 'Create your first task to get started.' : `No tasks with status "${statusFilter.replace('_', ' ')}".` }}
-        </p>
+            <div
+              v-if="!tasksByStatus[col.key as keyof typeof tasksByStatus].length"
+              class="py-10 text-center text-muted-foreground"
+              :class="dragOverColumn === col.key ? 'opacity-60' : 'opacity-40'"
+            >
+              <UIcon name="i-lucide-inbox" class="text-3xl mb-2" />
+              <p class="text-xs">Drop tasks here</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -210,6 +234,5 @@ const priorityBorder = (p: string) => p === 'high'
         </UForm>
       </template>
     </UModal>
-
   </div>
 </template>

@@ -19,6 +19,7 @@ const form = reactive({ title: '', content: '', date: '' })
 const today = new Date().toISOString().slice(0, 10)
 
 function openCreate() {
+  selectedNote.value = null
   Object.assign(form, { title: '', content: '', date: today })
   showCreateModal.value = true
 }
