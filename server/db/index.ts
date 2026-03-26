@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { resolve } from 'path'
 import * as schema from './schema'
 
-const dbPath = process.env.DATABASE_PATH || 'sqlite.db'
+const dbPath = process.env.DATABASE_PATH || resolve(process.cwd(), 'sqlite.db')
 const sqlite = new Database(dbPath)
 
 // Enable WAL mode for better performance

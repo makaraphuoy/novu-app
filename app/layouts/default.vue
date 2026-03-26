@@ -111,7 +111,6 @@ const userMenuItems = computed(() => [
         <!-- Sidebar -->
         <aside
           ref="sidebarRef"
-          v-show="sidebarOpen || true"
           class="fixed lg:static inset-y-0 left-0 z-40 w-56 flex-shrink-0 border-r border-gray-200 bg-background flex flex-col transition-transform duration-300"
           :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
         >
@@ -172,13 +171,6 @@ const userMenuItems = computed(() => [
         <div class="flex-1 flex flex-col overflow-hidden min-w-0">
           <!-- Mobile top bar -->
           <header class="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-background shrink-0">
-            <UButton
-              icon="i-lucide-menu"
-              variant="ghost"
-              size="sm"
-              color="neutral"
-              @click="sidebarOpen = true"
-            />
             <div class="flex items-center gap-2 flex-1">
               <div class="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
                 <UIcon name="i-lucide-sun" class="text-white text-xs" />
@@ -191,6 +183,13 @@ const userMenuItems = computed(() => [
               variant="ghost"
               size="sm"
               @click="colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'"
+            />
+            <UButton
+              icon="i-lucide-log-out"
+              color="error"
+              variant="ghost"
+              size="sm"
+              @click="confirmLogout"
             />
           </header>
 
